@@ -6,3 +6,4 @@
 *.fatbin
 
 Debug/
+Release/
