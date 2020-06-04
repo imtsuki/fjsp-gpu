@@ -1,6 +1,6 @@
 /*
  ============================================================================
- Name        : fjssp.cu
+ Name        : main.cu
  Author      : imtsuki
  Version     : 0.1.0
  Copyright   : imtsuki <me@qjx.app>
@@ -449,7 +449,7 @@ int main(void) {
     std::cout << "Max Threads per SM: " << prop.maxThreadsPerMultiProcessor
             << std::endl;
 
-    parse_input("./src/mk01.fjs");
+    parse_input("./src/test.fjs");
 
     std::cout << "total_jobs: " << total_jobs << "\n";
     std::cout << "total_machines: " << total_machines << "\n";
@@ -591,6 +591,8 @@ int main(void) {
                     << std::endl;
         }
     }
+
+    std::cout << "Done" << std::endl;
 
     CUDA_CHECK_RETURN(cudaFree(parent_candidates_states));
     CUDA_CHECK_RETURN(cudaFree(population_states));
