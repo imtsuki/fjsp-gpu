@@ -513,7 +513,18 @@ int main(int argc, const char *argv[]) {
         }
     }
 
+    auto min_iter = std::min_element(scores.begin(), scores.end());
+
+    int index = min_iter - scores.begin();
+
     std::cout << "Done" << std::endl;
+
+    std::cout << "Best solution score: " << scores[index] << std::endl;
+
+    for (int i = 0; i < INDIVIDUAL_LEN; i++) {
+        std::cout << population[index * INDIVIDUAL_LEN + i] << " ";
+    }
+    std::cout << std::endl;
 
     return 0;
 }
