@@ -34,12 +34,12 @@ const int MAX_STEPS_PER_JOB = 20;
 const int MAX_JOBS = 20;
 const int MAX_MACHINES = 20;
 
-int POPULATION_SIZE = 200;
+int POPULATION_SIZE = 4000;
 int INDIVIDUAL_LEN = 20; // TODO
 const int SIZE_PARENT_POOL = 7;
 
-int TOTALTHREADS = 1024;
-int BLOCKSIZE = 256;
+int TOTALTHREADS = 2048;
+int BLOCKSIZE = 1024;
 
 int total_jobs, total_machines, max_operations;
 
@@ -201,8 +201,8 @@ __device__ void assignment_crossover(Gene *child, Gene *parent_a,
     }
 
     for (int s = 0; s < individual_len; s++) {
-        int id_job = child[s].id_job;
-        int id_step = child[s].id_step;
+        int id_job = parent_a[s].id_job;
+        int id_step = parent_a[s].id_step;
         int i = reverse_index[id_job][id_step];
 
         child[s] = parent_a[s];
@@ -269,6 +269,7 @@ __device__ void swapping_mutation(Gene *individual, int individual_len,
                     individual[mutation_point + 1]);
         }
     }
+
 }
 
 __global__ void stage_1_breed_kernel(int *parents, Gene *population,
@@ -281,13 +282,13 @@ __global__ void stage_1_breed_kernel(int *parents, Gene *population,
         for (int i = index; i < population_size; i += stride) {
             if (i < population_size * 8 / 10) {
                 sequencing_crossover(&new_population[i * individual_len],
-                        &population[i * individual_len],
-                        &population[(i + 1) * individual_len], individual_len,
-                        jobs, &rand_states[i]);
+                        &population[parents[i] * individual_len],
+                        &population[parents[i + 1] * individual_len],
+                        individual_len, jobs, &rand_states[i]);
             } else {
                 for (int s = 0; s < individual_len; s++) {
-                    new_population[i * individual_len + s] = population[i
-                            * individual_len + s];
+                    new_population[i * individual_len + s] =
+                            population[parents[i] * individual_len + s];
                 }
 
                 swapping_mutation(&new_population[i * individual_len],
@@ -307,18 +308,18 @@ __global__ void stage_2_breed_kernel(int *parents, Gene *population,
         for (int i = index; i < population_size; i += stride) {
             if (i < population_size * 4 / 10) {
                 assignment_crossover(&new_population[i * individual_len],
-                        &population[i * individual_len],
-                        &population[(i + 1) * individual_len], individual_len,
-                        jobs);
+                        &population[parents[i] * individual_len],
+                        &population[parents[i + 1] * individual_len],
+                        individual_len, jobs);
             } else if (i < population_size * 8 / 10) {
                 sequencing_crossover(&new_population[i * individual_len],
-                        &population[i * individual_len],
-                        &population[(i + 1) * individual_len], individual_len,
-                        jobs, &rand_states[i]);
+                        &population[parents[i] * individual_len],
+                        &population[parents[i + 1] * individual_len],
+                        individual_len, jobs, &rand_states[i]);
             } else {
                 for (int s = 0; s < individual_len; s++) {
-                    new_population[i * individual_len + s] = population[i
-                            * individual_len + s];
+                    new_population[i * individual_len + s] =
+                            population[parents[i] * individual_len + s];
                 }
                 if (i < population_size * 9 / 10) {
                     assignment_mutation(&new_population[i * individual_len],
@@ -416,17 +417,19 @@ __global__ void stage_2_evaluate_kernel(int *scores, Gene *population,
                 int processing_time =
                         jobs[id_job].steps[id_step].candidates[id_operation].processing_time;
 
-                if (id_step > 0) {
-                    int previous_id_machine = last_step_id_machine[id_job];
-                    if (machines[id_machine] < machines[previous_id_machine]) {
-                        machines[id_machine] = machines[previous_id_machine];
-                    }
-                }
+                int previous_id_machine = last_step_id_machine[id_job];
+
+                machines[id_machine] =
+                        (id_step > 0
+                                && machines[id_machine]
+                                        < machines[previous_id_machine]) ?
+                                machines[previous_id_machine] :
+                                machines[id_machine];
 
                 machines[id_machine] += processing_time;
-                if (machines[id_machine] > value) {
-                    value = machines[id_machine];
-                }
+
+                value = machines[id_machine] > value ?
+                        machines[id_machine] : value;
 
                 last_step_id_machine[id_job] = id_machine;
             }
@@ -436,7 +439,7 @@ __global__ void stage_2_evaluate_kernel(int *scores, Gene *population,
     }
 }
 
-int main(void) {
+int main(int argc, const char *argv[]) {
     cudaDeviceProp prop;
     CUDA_CHECK_RETURN(cudaGetDeviceProperties(&prop, 0));
 
@@ -449,7 +452,12 @@ int main(void) {
     std::cout << "Max Threads per SM: " << prop.maxThreadsPerMultiProcessor
             << std::endl;
 
-    parse_input("./src/test.fjs");
+    const char *path = "./src/mk01.fjs";
+
+    if (argc >= 2) {
+        path = argv[1];
+    }
+    parse_input(path);
 
     std::cout << "total_jobs: " << total_jobs << "\n";
     std::cout << "total_machines: " << total_machines << "\n";
@@ -561,7 +569,7 @@ int main(void) {
         }
     }
 
-    int stage_2 = 700;
+    int stage_2 = 2000;
 
     while (stage_2--) {
         fill_rand_kernel<<<POPULATION_SIZE * SIZE_PARENT_POOL, 1>>>(
@@ -592,7 +600,18 @@ int main(void) {
         }
     }
 
+    auto min_iter = thrust::min_element(scores.begin(), scores.end());
+
+    int index = min_iter - scores.begin();
+
     std::cout << "Done" << std::endl;
+
+    std::cout << "Best solution score: " << scores[index] << std::endl;
+
+    for (int i = 0; i < INDIVIDUAL_LEN; i++) {
+        std::cout << population[index * INDIVIDUAL_LEN + i] << " ";
+    }
+    std::cout << std::endl;
 
     CUDA_CHECK_RETURN(cudaFree(parent_candidates_states));
     CUDA_CHECK_RETURN(cudaFree(population_states));
