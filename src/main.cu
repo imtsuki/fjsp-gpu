@@ -34,7 +34,7 @@ const int MAX_STEPS_PER_JOB = 20;
 const int MAX_JOBS = 20;
 const int MAX_MACHINES = 20;
 
-int POPULATION_SIZE = 4000;
+int POPULATION_SIZE = 2000;
 int INDIVIDUAL_LEN = 20; // TODO
 const int SIZE_PARENT_POOL = 7;
 
@@ -244,16 +244,19 @@ __device__ void sequencing_crossover(Gene *child, Gene *parent_a,
 
 __device__ void assignment_mutation(Gene *individual, int individual_len,
         Job *jobs, curandState_t *rand_state) {
-    int mutation_point = curand(rand_state) % individual_len;
-    int id_job = individual[mutation_point].id_job;
-    int id_step = individual[mutation_point].id_step;
-    int len = jobs[id_job].steps[id_step].len;
+    int count = 5;
+    while (count--) {
+        int mutation_point = curand(rand_state) % individual_len;
+        int id_job = individual[mutation_point].id_job;
+        int id_step = individual[mutation_point].id_step;
+        int len = jobs[id_job].steps[id_step].len;
 
-    int id_operation = curand(rand_state) % len;
+        int id_operation = curand(rand_state) % len;
 
-    individual[mutation_point].id_operation = id_operation;
-    individual[mutation_point].id_machine =
-            jobs[id_job].steps[id_step].candidates[id_operation].id_machine;
+        individual[mutation_point].id_operation = id_operation;
+        individual[mutation_point].id_machine =
+                jobs[id_job].steps[id_step].candidates[id_operation].id_machine;
+    }
 
 }
 
@@ -452,7 +455,7 @@ int main(int argc, const char *argv[]) {
     std::cout << "Max Threads per SM: " << prop.maxThreadsPerMultiProcessor
             << std::endl;
 
-    const char *path = "./src/mk01.fjs";
+    const char *path = "./data/mk01.fjs";
 
     if (argc >= 2) {
         path = argv[1];
@@ -534,8 +537,6 @@ int main(int argc, const char *argv[]) {
     stage_1_evaluate_kernel<<<TOTALTHREADS, BLOCKSIZE>>>(scores_ptr, pop_ptr,
             POPULATION_SIZE, INDIVIDUAL_LEN, jobs);
     CUDA_CHECK_RETURN(cudaPeekAtLastError());
-
-    int best_score = INT_MAX;
 
     int stage_1 = 3000;
 

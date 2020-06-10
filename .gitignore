@@ -7,3 +7,6 @@
 
 Debug/
 Release/
+
+main_cuda
+main_cpu
